@@ -1,0 +1,3741 @@
+{
+  "name": "Freelancer AI Client Deal & Delivery Agent (Human-in-the-Loop)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "freelancer-client-inquiry",
+        "options": {}
+      },
+      "id": "407d59e6-16c9-4232-826b-aca1bd078596",
+      "name": "Client Message Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        96
+      ],
+      "webhookId": "3c479a94-e8e1-461b-bbce-6f0f1b756e8e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst msg = raw.message;\nif (msg && msg.chat) {\n  const text = String(msg.text || msg.caption || '').trim();\n  const em = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/);\n  const f = msg.from || {};\n  const name = [f.first_name, f.last_name].filter(Boolean).join(' ') || f.username || 'Client';\n  return [{ json: { body: { from: em ? em[0] : '', name: name, message: text, source: 'telegram', telegram_chat_id: String(msg.chat.id) } } }];\n}\nconst fbv = raw.value || (raw.entry && raw.entry[0] && ((raw.entry[0].changes && raw.entry[0].changes[0] && raw.entry[0].changes[0].value) || (raw.entry[0].messaging && raw.entry[0].messaging[0]))) || null;\nif (fbv && (raw.field || raw.object || raw.entry)) {\n  const fm = fbv.message;\n  const ftext = String((fm && typeof fm === 'object' ? fm.text : fm) || fbv.text || '').trim();\n  const fem = ftext.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/);\n  const sender = fbv.sender || fbv.from || {};\n  const fname = sender.name || 'Client';\n  return [{ json: { body: { from: fem ? fem[0] : '', name: fname, message: ftext, source: 'facebook', facebook_sender_id: String(sender.id || '') } } }];\n}\nreturn [{ json: raw }];"
+      },
+      "id": "e460abbb-cfd9-4c54-8aa5-b9dafc6ad8c9",
+      "name": "Normalize Client Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst b = raw.body || raw;\nconst from = String(b.from || '').trim();\nconst m = from.match(/<([^>]+)>/);\nconst clientEmail = (m ? m[1] : from).trim().toLowerCase();\nconst clientName = String(b.name || '').trim() || 'Client';\nconst message = String(b.message || '').replace(/\\s+/g, ' ').trim();\nreturn [{ json: {\n  project_id: 'P' + Date.now(),\n  client_email: clientEmail,\n  client_name: clientName,\n  message: message,\n  created_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "3dd0036a-ab64-4293-b495-0f500cf7c22f",
+      "name": "Clean Input & Generate Project ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Settings"
+        },
+        "options": {}
+      },
+      "id": "a20ac340-cfbe-41d2-8600-40e45ff2abc0",
+      "name": "Read Settings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        496,
+        224
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Feedback"
+        },
+        "options": {}
+      },
+      "id": "d066bc28-89a5-4b8b-aca9-71e31b610920",
+      "name": "Read Feedback History",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        224
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Clean Input & Generate Project ID').first().json;\nconst s = $('Read Settings').all().map(function (i) { return i.json; })[0] || {};\nconst fb = $('Read Feedback History').all().map(function (i) { return i.json; }).filter(function (r) { return r && r.project_id; });\nconst last5 = fb.slice(-5);\nconst lines = last5.map(function (r) {\n  return '- Gate ' + r.gate + ' | decision: ' + r.decision + ' | freelancer edit/feedback: ' + (r.human_edit_or_feedback || 'none');\n});\nreturn [{ json: {\n  project_id: base.project_id,\n  client_email: base.client_email,\n  client_name: base.client_name,\n  message: base.message,\n  created_at: base.created_at,\n  min_price: Number(s.min_price) || 0,\n  max_deadline_days: Number(s.max_deadline_days) || 7,\n  rate_per_post: Number(s.rate_per_post) || 0,\n  max_revisions: Number(s.max_revisions) || 2,\n  feedback_examples: lines.length ? lines.join('\\n') : 'No past corrections yet.',\n} }];"
+      },
+      "id": "77669ab9-2446-4722-ad64-a0b714e29768",
+      "name": "Build Context (Settings + Last 5 Feedback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Client name: {{ $json.client_name }}\nClient message: {{ $json.message }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an assistant to a freelance content writer. Read the client's message and extract requirements. If something is not mentioned set it to null. Never invent details.\n\nSupported services (content_type): blog_post, article, website_copy, product_description, newsletter, seo_content, social_captions. Use \"other\" if the request fits none of them. The client may write in English, Roman Urdu or Urdu; set language to the language the client wants the content in.\n\nOut of scope - set is_clear_enough=false and write a short, polite reason in out_of_scope_reason for: academic assignments, essays or thesis that the client will submit as their own work; fake reviews or fake testimonials; misleading health, legal or financial claims; adult or hateful content; anything unethical or not a supported content type. Otherwise out_of_scope_reason must be an empty string.\n\nSet needs_extra_review=true if the topic is medical, legal, financial or safety related. Otherwise false.\n\nReturn JSON with: content_type, topic, num_pieces, words_per_piece, target_audience, tone, language, keywords (array, empty if none), deadline_days, needs_extra_review, out_of_scope_reason, missing_info (array of strings naming what is missing, for example topic, number of articles, word count, audience, tone, keywords, deadline, language), is_clear_enough.\n\nis_clear_enough is true ONLY if content_type, topic, num_pieces, words_per_piece and language are all known AND the request is in scope. Otherwise false.\n\nINTAKE RULES (you are the intake assistant of a professional content writing agency):\n1. GREETING / CASUAL TEXT (for example \"hi\", \"hello\", \"hey\", \"are you available?\"): set is_clear_enough=false, set every unknown field to null, and set missing_info to [\"Greeting received. Detailed topic, content type, target word count, and deadline needed.\"].\n2. INCOMPLETE / VAGUE REQUEST (for example \"I need a blog post\"): set is_clear_enough=false and list in missing_info exactly what is missing (word count, target audience, tone, deadline, topic).\n3. CLEAR REQUEST (for example \"Write a 1000-word SEO article on AI Trends by tomorrow\"): set is_clear_enough=true and extract topic, length, tone and deadline."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "8b796363-c728-4f66-a639-ed27ec121b93",
+      "name": "AI Requirements Analyst",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1168,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "2d3d030b-ead8-4753-8885-f07e8f7a536a",
+      "name": "Requirements Analyst Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1184,
+        448
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"content_type\": { \"type\": \"string\", \"enum\": [\"blog_post\", \"article\", \"website_copy\", \"product_description\", \"newsletter\", \"seo_content\", \"social_captions\", \"other\"] },\n    \"topic\": { \"type\": [\"string\", \"null\"] },\n    \"num_pieces\": { \"type\": [\"number\", \"null\"] },\n    \"words_per_piece\": { \"type\": [\"number\", \"null\"] },\n    \"target_audience\": { \"type\": [\"string\", \"null\"] },\n    \"tone\": { \"type\": [\"string\", \"null\"] },\n    \"language\": { \"type\": [\"string\", \"null\"] },\n    \"keywords\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"deadline_days\": { \"type\": [\"number\", \"null\"] },\n    \"needs_extra_review\": { \"type\": \"boolean\" },\n    \"out_of_scope_reason\": { \"type\": \"string\" },\n    \"missing_info\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"is_clear_enough\": { \"type\": \"boolean\" }\n  },\n  \"required\": [\"content_type\", \"topic\", \"num_pieces\", \"words_per_piece\", \"target_audience\", \"tone\", \"language\", \"keywords\", \"deadline_days\", \"needs_extra_review\", \"out_of_scope_reason\", \"missing_info\", \"is_clear_enough\"]\n}",
+        "autoFix": true
+      },
+      "id": "a2268b23-11b6-433e-afa7-c53b20eff546",
+      "name": "Requirements Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1312,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "6bceab84-ff4b-45ea-873b-b4f8dbf594e1",
+      "name": "Requirements Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1312,
+        656
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "clear",
+              "leftValue": "={{ $json.output.is_clear_enough }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "72910214-f76d-4c62-85a7-9d762832ef6f",
+      "name": "Is Request Clear Enough?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Client name: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.client_name }}\nOriginal client message: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.message }}\nExtracted requirements: {{ JSON.stringify($('AI Requirements Analyst').first().json.output) }}\n\nBusiness rules (from Settings):\n- Minimum price (PKR): {{ $('Build Context (Settings + Last 5 Feedback)').first().json.min_price }}\n- rate_per_post = price in PKR for ONE standard piece of 500 words: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.rate_per_post }}\n- Maximum deadline (days): {{ $('Build Context (Settings + Last 5 Feedback)').first().json.max_deadline_days }}\n- Maximum revisions: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.max_revisions }}\n\nLearn from these past corrections by the freelancer and avoid the same mistakes:\n{{ $('Build Context (Settings + Last 5 Feedback)').first().json.feedback_examples }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are the proposal writer for a freelance content writer (blog posts, articles, website copy, product descriptions, newsletters, SEO content, social media captions) serving small businesses and individuals.\n\nPricing: total_words = num_pieces x words_per_piece. Base price = rate_per_post x (total_words / 500). Add 20% if SEO keyword research is needed (keywords given or content_type is seo_content). Add another 20% if the deadline is under 3 days. Round to the nearest 50 PKR. Never go below the minimum price.\nDeadline: estimate 1 day per 1000 words, minimum 2 days, never above the maximum deadline.\nRevisions: offer exactly the maximum revisions from Settings.\n\nRules: only promise what is in the extracted requirements. Never invent prices, discounts, statistics, awards, sources or extra services. Never promise SEO rankings, traffic, sales, or \"100% plagiarism-free\" - say \"original, written from scratch\" instead. If the topic is medical, legal, financial or safety related, mention in internal_note that extra fact-checking is needed.\n\nemail_text must be a professional email to the client (in the client's language: English, Roman Urdu or Urdu) that lists: what will be delivered, total words, price (PKR), deadline, number of revisions, and what is NOT included (images, publishing, SEO ranking guarantees). It must end with exactly: \"This service uses an AI-assisted workflow with human review.\"\n\nReturn JSON: scope (array of short deliverable strings), content_type, num_pieces, words_per_piece, total_words, price, deadline_days, revisions, email_text, internal_note (short explanation of the price for the freelancer only)."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "e3950e37-2a9d-41dc-b2ab-f88d8ad0243e",
+      "name": "AI Proposal Writer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        800,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "1eac8960-6516-4be4-ae93-eb3a2e785bd3",
+      "name": "Proposal Writer Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        816,
+        736
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"scope\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"content_type\": { \"type\": \"string\" },\n    \"num_pieces\": { \"type\": \"number\" },\n    \"words_per_piece\": { \"type\": \"number\" },\n    \"total_words\": { \"type\": \"number\" },\n    \"price\": { \"type\": \"number\" },\n    \"deadline_days\": { \"type\": \"number\" },\n    \"revisions\": { \"type\": \"number\" },\n    \"email_text\": { \"type\": \"string\" },\n    \"internal_note\": { \"type\": \"string\" }\n  },\n  \"required\": [\"scope\", \"content_type\", \"num_pieces\", \"words_per_piece\", \"total_words\", \"price\", \"deadline_days\", \"revisions\", \"email_text\", \"internal_note\"]\n}",
+        "autoFix": true
+      },
+      "id": "97301b3e-3675-4306-807f-66d4ea3132d1",
+      "name": "Proposal Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "f0150b63-7e70-4106-96b3-9cf7b001e13b",
+      "name": "Proposal Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        944
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Context (Settings + Last 5 Feedback)').first().json;\nconst requirements = $('AI Requirements Analyst').first().json.output || {};\nconst p = $input.first().json.output || {};\nconst warnings = [];\nconst DISCLOSURE = 'This service uses an AI-assisted workflow with human review.';\n\nlet numPieces = Number(p.num_pieces);\nif (!isFinite(numPieces) || numPieces <= 0) numPieces = Number(requirements.num_pieces) || 0;\nlet wordsPer = Number(p.words_per_piece);\nif (!isFinite(wordsPer) || wordsPer <= 0) wordsPer = Number(requirements.words_per_piece) || 0;\nconst expectedTotal = numPieces * wordsPer;\nlet totalWords = Number(p.total_words);\nif (!isFinite(totalWords) || totalWords !== expectedTotal) {\n  warnings.push('total_words ' + p.total_words + ' did not match num_pieces x words_per_piece (' + expectedTotal + ') - corrected');\n  totalWords = expectedTotal;\n}\n\nlet price = Number(p.price);\nconst aiPrice = isFinite(price) ? price : null;\nconst minimumPrice = ctx.rate_per_post * totalWords / 500;\nconst floorPrice = Math.ceil(Math.max(ctx.min_price, minimumPrice * 0.9));\nif (!isFinite(price)) { price = floorPrice; warnings.push('Price was missing/invalid - set to ' + floorPrice); }\nelse if (price < floorPrice) { warnings.push('Price ' + price + ' was below the allowed minimum - raised to ' + floorPrice + ' (min_price ' + ctx.min_price + ', rate-based minimum ' + Math.round(minimumPrice) + ')'); price = floorPrice; }\n\nlet deadline = Number(p.deadline_days);\nif (!isFinite(deadline)) { deadline = ctx.max_deadline_days; warnings.push('Deadline missing/invalid - set to max_deadline_days ' + ctx.max_deadline_days); }\nif (deadline > ctx.max_deadline_days) { warnings.push('Deadline ' + deadline + ' days exceeded max - reduced to ' + ctx.max_deadline_days); deadline = ctx.max_deadline_days; }\n\nlet revisions = Number(p.revisions);\nif (!isFinite(revisions)) { revisions = ctx.max_revisions; warnings.push('Revisions missing/invalid - set to max_revisions ' + ctx.max_revisions); }\nif (revisions > ctx.max_revisions) { warnings.push('Revisions ' + revisions + ' exceeded max - reduced to ' + ctx.max_revisions); revisions = ctx.max_revisions; }\n\nif (requirements.needs_extra_review === true) warnings.push('Sensitive topic: check facts carefully');\n\nlet emailText = String(p.email_text || '');\nif (emailText.indexOf(DISCLOSURE) < 0) emailText = emailText.trim() + '\\n\\n' + DISCLOSURE;\n\nreturn [{ json: {\n  project_id: ctx.project_id,\n  client_email: ctx.client_email,\n  client_name: ctx.client_name,\n  message: ctx.message,\n  created_at: ctx.created_at,\n  requirements: requirements,\n  ai_price: aiPrice,\n  proposal: {\n    scope: Array.isArray(p.scope) ? p.scope : [],\n    content_type: String(p.content_type || requirements.content_type || ''),\n    num_pieces: numPieces,\n    words_per_piece: wordsPer,\n    total_words: totalWords,\n    price: price,\n    deadline_days: deadline,\n    revisions: revisions,\n    email_text: emailText,\n    internal_note: String(p.internal_note || ''),\n  },\n  warnings: warnings,\n} }];"
+      },
+      "id": "f0a2d44b-269c-4569-9a98-947191e174f8",
+      "name": "Guardrail Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $json.project_id }}",
+            "client_email": "={{ $json.client_email }}",
+            "client_name": "={{ $json.client_name }}",
+            "status": "PROPOSAL_PENDING",
+            "requirements_json": "={{ JSON.stringify($json.requirements) }}",
+            "proposal_json": "={{ JSON.stringify($json.proposal) }}",
+            "price": "={{ $json.proposal.price }}",
+            "deadline_days": "={{ $json.proposal.deadline_days }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "12a11fd5-fae0-4442-a6b5-508e096428e9",
+      "name": "Log Project - PROPOSAL_PENDING",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1376,
+        512
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Guardrail Check').first().json;\nconst san = function (t) { return String(t === null || t === undefined ? '' : t).replace(/[<>&*]/g, ' '); };\nconst p = g.proposal;\nconst warn = g.warnings.length ? g.warnings.map(function (w) { return '- ' + san(w); }).join('\\n') : 'None';\nconst text = [\n  'GATE 1: Approve this deal?',\n  '',\n  'Client: ' + san(g.client_name) + ' (' + san(g.client_email) + ')',\n  'Original client message: ' + san(g.message),\n  '',\n  'Content type: ' + san(p.content_type),\n  'Topic: ' + san(g.requirements.topic),\n  'Pieces x words: ' + p.num_pieces + ' x ' + p.words_per_piece + ' (total words: ' + p.total_words + ')',\n  'Scope: ' + p.scope.map(san).join('; '),\n  'AI price: ' + (g.ai_price === null ? 'n/a' : g.ai_price) + ' PKR | Price after guardrail: ' + p.price + ' PKR',\n  'Deadline: ' + p.deadline_days + ' days',\n  'Revisions: ' + p.revisions,\n  '',\n  'Internal note (why this price): ' + san(p.internal_note),\n  '',\n  'Guardrail warnings:',\n  warn,\n].join('\\n');\nreturn [{ json: { gate1_message: text, ai_price: p.price } }];"
+      },
+      "id": "b0a6e6e5-1dc0-4a20-b242-76cdf99dfaa0",
+      "name": "Prepare Gate 1 Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Action needed - GATE 1: Approve this deal?",
+        "message": "={{ $json.gate1_message.replace(/\\n/g, \"<br>\") }}",
+        "responseType": "customForm",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "final_price",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.ai_price }}",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "note",
+              "placeholder": "Optional note / reason for changes"
+            }
+          ]
+        },
+        "options": {
+          "messageButtonLabel": "Review and decide",
+          "responseFormTitle": "GATE 1: Approve this deal?",
+          "responseFormDescription": "Approve or reject the AI-drafted proposal. You may edit the final price.",
+          "limitWaitTime": {
+            "values": {
+              "resumeAmount": 24
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "id": "71b9b927-fbc8-437e-badf-847c59c3a6e4",
+      "name": "Gate 1 - Freelancer Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1824,
+        512
+      ],
+      "webhookId": "f20515c6-de58-421b-97e7-49d8a5a2f593",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Guardrail Check').first().json;\nconst r = $input.first().json || {};\nconst d = (r.data && typeof r.data === 'object') ? r.data : r;\nconst decision = d.decision ? String(d.decision) : 'TIMEOUT';\nconst aiPrice = g.proposal.price;\nlet finalPrice = Number(d.final_price);\nif (!isFinite(finalPrice) || finalPrice <= 0) finalPrice = aiPrice;\nconst note = d.note ? String(d.note) : '';\nconst edit = finalPrice !== aiPrice ? 'Price changed from ' + aiPrice + ' to ' + finalPrice : 'Price unchanged (' + aiPrice + ')';\nconst esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nconst p = g.proposal;\nconst html = '<p>' + esc(p.email_text).replace(/\\n/g, '<br>') + '</p>'\n  + '<hr><p><b>Proposal summary</b></p><ul>'\n  + p.scope.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('')\n  + '</ul><p><b>Content:</b> ' + esc(p.content_type) + ', ' + p.num_pieces + ' x ' + p.words_per_piece + ' words (total ' + p.total_words + ' words)<br><b>Price (PKR):</b> ' + finalPrice + '<br><b>Delivery time:</b> ' + p.deadline_days + ' days<br><b>Revisions included:</b> ' + p.revisions + '</p>'\n  + '<hr><p><small>This service uses an AI-assisted workflow with human review.</small></p>';\nreturn [{ json: {\n  decision: decision,\n  timed_out: decision === 'TIMEOUT',\n  final_price: finalPrice,\n  note: note,\n  human_edit: edit + (note ? '. Note: ' + note : ''),\n  proposal_email_html: html,\n  proposal_json_final: JSON.stringify(Object.assign({}, p, { price: finalPrice })),\n  timestamp: new Date().toISOString(),\n} }];"
+      },
+      "id": "0418b716-44c7-44a3-af56-888bff1a1e82",
+      "name": "Gate 1 - Normalize Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Feedback"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "gate": "1",
+            "decision": "={{ $json.decision }}",
+            "human_edit_or_feedback": "={{ $json.human_edit }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gate",
+              "displayName": "gate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "human_edit_or_feedback",
+              "displayName": "human_edit_or_feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7b19a606-e771-48db-99df-0ab4ab13f301",
+      "name": "Log Gate 1 Feedback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2272,
+        512
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "g1",
+              "leftValue": "={{ $('Gate 1 - Normalize Response').first().json.decision }}",
+              "rightValue": "Approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9cf3a76-c0e8-4291-9cba-77e96396f45d",
+      "name": "Gate 1 Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2496,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "=Proposal for your content writing project - {{ $('Guardrail Check').first().json.client_name }}",
+        "message": "={{ $('Gate 1 - Normalize Response').first().json.proposal_email_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "cb86c9c1-6fd8-4ab2-a0f1-2d26e10f8762",
+      "name": "Email Proposal to Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2720,
+        416
+      ],
+      "webhookId": "944b19dc-85ae-4eba-84e3-bd678a5c3331",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "PROPOSAL_SENT",
+            "price": "={{ $('Gate 1 - Normalize Response').first().json.final_price }}",
+            "deadline_days": "={{ $('Guardrail Check').first().json.proposal.deadline_days }}",
+            "proposal_json": "={{ $('Gate 1 - Normalize Response').first().json.proposal_json_final }}"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c92df001-d12a-4f01-8fd0-3970d8b51d32",
+      "name": "Update Status - PROPOSAL_SENT",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2944,
+        416
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "=Please confirm: proposal for {{ $(\"Guardrail Check\").first().json.client_name }}",
+        "message": "=Hello {{ $('Guardrail Check').first().json.client_name }},\n\nDo you agree with the proposal we just emailed you (price: PKR {{ $('Gate 1 - Normalize Response').first().json.final_price }}, delivery: {{ $('Guardrail Check').first().json.proposal.deadline_days }} days)? Please click Accept or Decline.\n\nThis service uses an AI-assisted workflow with human review.",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "Accept"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "resumeAmount": 24
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "id": "9490c0e9-8bf9-43b2-b671-1398a5f5fecb",
+      "name": "Client Decision - Accept or Decline",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3168,
+        416
+      ],
+      "webhookId": "b6d9018e-f57a-411b-92d4-01d5618f4c41",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "acc",
+              "leftValue": "={{ $json.data && $json.data.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5b22913-71f5-4cf9-a31b-311a145a84c1",
+      "name": "Client Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3392,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "ACCEPTED"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7778ba9-a12b-448f-80fa-f299add42f19",
+      "name": "Update Status - ACCEPTED",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3616,
+        320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "retry_count",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "a2",
+              "name": "feedback_from_qa",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "gate2_rounds",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f4a75ac-9da0-43a7-a649-dee860542cd3",
+      "name": "Init Retry State",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1328,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "retry_count",
+              "value": "={{ $json.retry_count }}",
+              "type": "number"
+            },
+            {
+              "id": "r2",
+              "name": "feedback_from_qa",
+              "value": "={{ $json.feedback_from_qa }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "gate2_rounds",
+              "value": "={{ $json.gate2_rounds }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6103a5e6-7596-4c88-84a8-322ea39a0a17",
+      "name": "Round State",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1552,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Requirements: {{ JSON.stringify($('Guardrail Check').first().json.requirements) }}\nAgreed scope: {{ JSON.stringify($('Guardrail Check').first().json.proposal.scope) }}\ncontent_type: {{ $('Guardrail Check').first().json.proposal.content_type }}\nTopic: {{ $('Guardrail Check').first().json.requirements.topic }}\nnum_pieces: {{ $('Guardrail Check').first().json.proposal.num_pieces }}\nwords_per_piece: {{ $('Guardrail Check').first().json.proposal.words_per_piece }}\nAudience: {{ $('Guardrail Check').first().json.requirements.target_audience || 'general audience' }}\nTone: {{ $('Guardrail Check').first().json.requirements.tone || 'professional and friendly' }}\nLanguage: {{ $('Guardrail Check').first().json.requirements.language }}\nKeywords: {{ ($('Guardrail Check').first().json.requirements.keywords || []).join(', ') || 'none' }}\nfeedback_from_qa: {{ $json.feedback_from_qa || '' }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a professional content writer. Write exactly num_pieces pieces of content_type about the topic, each about words_per_piece words (within +/-10%). Use the audience, tone and language given in the user message. Naturally include the given keywords where relevant (no keyword stuffing).\n\nStructure: for blog_post/article use a title, short intro, headings (H2), body, conclusion; for website_copy use headline, subheadline, sections, call to action; for product_description use title, benefits, specs placeholders marked [CLIENT TO CONFIRM], short description; for newsletter use subject line, preview text, body, CTA; for social_captions use caption, hashtags.\n\nRules: original text written from scratch; no invented facts, statistics, quotes or sources (use [CLIENT TO CONFIRM] if a fact is needed and not given); no exaggerated promises; no SEO ranking or sales guarantees. If feedback_from_qa is not empty, fix exactly those issues first.\n\nReturn JSON {\"pieces\": [{\"title\": \"\", \"content\": \"\", \"meta_description\": \"\", \"keywords_used\": []}]}. Put the full text of each piece in content."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "0d110fb9-9b65-4fec-a6d0-2cb6a964f325",
+      "name": "AI Content Creator",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1776,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "a69eec18-edf1-4dce-a2d2-3de00892dda0",
+      "name": "Content Creator Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1792,
+        880
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"pieces\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"title\": { \"type\": \"string\" },\n          \"content\": { \"type\": \"string\" },\n          \"meta_description\": { \"type\": \"string\" },\n          \"keywords_used\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } }\n        },\n        \"required\": [\"title\", \"content\", \"meta_description\", \"keywords_used\"]\n      }\n    }\n  },\n  \"required\": [\"pieces\"]\n}",
+        "autoFix": true
+      },
+      "id": "8e99dc99-5b38-4f2c-8c5d-c30fb2805487",
+      "name": "Content Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1920,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "8bd09f95-196e-4f20-b0c4-bc6a100e450a",
+      "name": "Content Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1920,
+        1088
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const st = $('Round State').first().json;\nconst g = $('Guardrail Check').first().json;\nconst req = g.requirements || {};\nconst prop = g.proposal || {};\nconst pieces = (($input.first().json.output || {}).pieces) || [];\nconst expectedPieces = Number(prop.num_pieces) || Number(req.num_pieces) || 0;\nconst target = Number(prop.words_per_piece) || Number(req.words_per_piece) || 0;\nconst keywords = Array.isArray(req.keywords) ? req.keywords.filter(function (k) { return k && String(k).trim(); }) : [];\nconst esc = function (t) { return String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nconst countWords = function (t) { return String(t || '').trim().split(/\\s+/).filter(function (w) { return w.length > 0; }).length; };\n\nconst counts = pieces.map(function (p) { return countWords(p.content); });\nconst total = counts.reduce(function (a, b) { return a + b; }, 0);\nconst avg = counts.length ? Math.round(total / counts.length) : 0;\nconst lower = Math.floor(target * 0.9);\nconst upper = Math.ceil(target * 1.1);\nconst issues = [];\n\nif (pieces.length !== expectedPieces) issues.push('Piece count issue: expected ' + expectedPieces + ' pieces but got ' + pieces.length);\ncounts.forEach(function (c, i) {\n  if (c === 0) issues.push('Piece ' + (i + 1) + ' is empty');\n  else if (target > 0 && (c < lower || c > upper)) issues.push('Word count issue: piece ' + (i + 1) + ' has ' + c + ' words (target ' + target + ', allowed ' + lower + '-' + upper + ')');\n});\nif (target > 0 && counts.length && (avg < lower || avg > upper)) issues.push('Word count issue: average is ' + avg + ' words per piece (target ' + target + ', allowed ' + lower + '-' + upper + ')');\n\nconst allText = pieces.map(function (p) { return (p.title || '') + ' ' + (p.content || ''); }).join(' ').toLowerCase();\nconst missingKw = keywords.filter(function (k) { return allText.indexOf(String(k).toLowerCase()) < 0; });\nif (missingKw.length) issues.push('Keywords not found in the text: ' + missingKw.join(', '));\n\nconst report = 'Pieces: ' + pieces.length + ' of ' + expectedPieces + ' requested. Words per piece: ' + (counts.length ? counts.join(', ') : 'n/a') + '. Average: ' + avg + ' (target ' + target + ', allowed ' + lower + '-' + upper + '). Total words: ' + total + ' (agreed ' + (expectedPieces * target) + '). Keywords: ' + (keywords.length ? (keywords.length - missingKw.length) + ' of ' + keywords.length + ' found' : 'none requested') + '.';\n\nconst sep = '\\n\\n----------------------------------------\\n\\n';\nlet text = pieces.map(function (p, i) {\n  return 'PIECE ' + (i + 1) + ' of ' + pieces.length + '\\nTitle: ' + (p.title || '') + '\\nMeta description: ' + (p.meta_description || '') + '\\n\\n' + (p.content || '') + '\\n\\nKeywords used: ' + (Array.isArray(p.keywords_used) ? p.keywords_used.join(', ') : '');\n}).join(sep);\nif (text.length > 45000) text = text.slice(0, 44900) + '\\n\\n[TRUNCATED to fit the Google Sheets cell limit]';\nconst html = pieces.map(function (p, i) {\n  return '<h3>Piece ' + (i + 1) + ': ' + esc(p.title) + '</h3><p><i>Meta description: ' + esc(p.meta_description) + '</i></p><p>' + esc(p.content).replace(/\\n/g, '<br>') + '</p>';\n}).join('<hr>');\n\nreturn [{ json: {\n  pieces: pieces,\n  piece_count: pieces.length,\n  total_words: total,\n  average_words: avg,\n  deliverable_text: text,\n  deliverable_html: html,\n  word_count_report: report,\n  automatic_issues: issues,\n  retry_count: st.retry_count,\n  feedback_from_qa: st.feedback_from_qa,\n  gate2_rounds: st.gate2_rounds,\n} }];"
+      },
+      "id": "7349b7f1-5619-4874-886b-c61c60cc8a8f",
+      "name": "Package Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2128,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Agreed requirements: {{ JSON.stringify($('Guardrail Check').first().json.requirements) }}\nAgreed scope: {{ JSON.stringify($('Guardrail Check').first().json.proposal.scope) }}\nExpected pieces: {{ $('Guardrail Check').first().json.proposal.num_pieces }} x {{ $('Guardrail Check').first().json.proposal.words_per_piece }} words\nActual pieces: {{ $json.piece_count }}\nWord count report (computed by code): {{ $json.word_count_report }}\nautomatic_issues: {{ JSON.stringify($json.automatic_issues) }}\n\nDraft to review:\n{{ $json.deliverable_text }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a strict editor. Compare the draft with the requirements and the automatic_issues. Check: correct tone and language, grammar and flow, matches topic and audience, no invented facts/stats/quotes, no unrealistic promises, no repeated or filler text, structure matches content_type, nothing outside the agreed scope. Combine your findings with automatic_issues.\n\nReturn JSON: passed (boolean), score (0-100), issues (array of short, concrete problems to fix; empty if none). passed must be false if there is any word-count, piece-count or invented-fact issue."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "cdf19855-e189-4bef-86db-f6a446be9fba",
+      "name": "AI QA Critic",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2352,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "b2468a8f-5f9a-4c79-950c-a21cdde80cff",
+      "name": "QA Critic Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2368,
+        880
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"passed\": { \"type\": \"boolean\" },\n    \"score\": { \"type\": \"number\" },\n    \"issues\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } }\n  },\n  \"required\": [\"passed\", \"score\", \"issues\"]\n}",
+        "autoFix": true
+      },
+      "id": "5163b2bb-7916-4cd7-a193-1929adf202cb",
+      "name": "QA Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2496,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "8b7edb64-3a74-4e79-befb-c4ecb9ff1654",
+      "name": "QA Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2496,
+        1088
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "qa",
+              "leftValue": "={{ ($json.output.passed === true && ($('Package Draft').first().json.automatic_issues || []).length === 0) || $('Round State').first().json.retry_count >= 2 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "800efc29-ec7e-45da-9bf3-52cc2c3010c6",
+      "name": "QA Passed or Retries Exhausted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2704,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const qa = $input.first().json.output || {};\nconst draft = $('Package Draft').first().json;\nconst g = $('Guardrail Check').first().json;\nconst san = function (t) { return String(t === null || t === undefined ? '' : t).replace(/[<>&*]/g, ' '); };\nconst auto = Array.isArray(draft.automatic_issues) ? draft.automatic_issues : [];\nconst qaIssues = Array.isArray(qa.issues) ? qa.issues.map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); }) : [];\nconst issues = qaIssues.concat(auto.filter(function (a) { return qaIssues.indexOf(a) < 0; }));\nconst issueText = issues.length ? issues.map(function (x) { return '- ' + san(x); }).join('\\n') : 'None';\nconst unresolved = qa.passed !== true || auto.length > 0;\nconst head = [\n  'GATE 2: Approve final work for delivery?',\n  '',\n  'Client: ' + san(g.client_name),\n  'AI QA score: ' + qa.score + '/100' + (unresolved ? '  --  QA DID NOT PASS (unresolved issues after ' + draft.retry_count + ' retries)' : '  --  QA passed'),\n  'QA issues:',\n  issueText,\n  '',\n  'Word count report: ' + san(draft.word_count_report),\n  '',\n  'Revision rounds used so far: ' + draft.gate2_rounds + ' of 2',\n  '',\n  'Deliverable:',\n].join('\\n');\nconst body = san(draft.deliverable_text);\nconst full = head + '\\n' + body;\nreturn [{ json: {\n  gate2_message: full,\n  gate2_full: full,\n  qa_score: qa.score,\n  qa_passed: !unresolved,\n  qa_issues: issues,\n  word_count_report: draft.word_count_report,\n  deliverable_text: draft.deliverable_text,\n  deliverable_html: draft.deliverable_html,\n} }];"
+      },
+      "id": "e9cae1c9-446c-49df-a5d9-cfb586a4be37",
+      "name": "Prepare Gate 2 Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "WORK_REVIEW",
+            "qa_score": "={{ $('Prepare Gate 2 Review').first().json.qa_score }}",
+            "deliverable": "={{ $('Prepare Gate 2 Review').first().json.deliverable_text }}"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f61da84-10eb-40f2-86f8-e75bfcc91d52",
+      "name": "Update Status - WORK_REVIEW",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3152,
+        560
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Action needed - GATE 2: Approve final work?",
+        "message": "={{ $('Prepare Gate 2 Review').first().json.gate2_message.replace(/\\n/g, \"<br>\") }}",
+        "responseType": "customForm",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Request changes"
+                  },
+                  {
+                    "option": "Reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "feedback",
+              "fieldType": "textarea",
+              "placeholder": "What should be changed? (used when you pick Request changes)"
+            }
+          ]
+        },
+        "options": {
+          "messageButtonLabel": "Review and decide",
+          "responseFormTitle": "GATE 2: Approve final work for delivery?",
+          "responseFormDescription": "={{ $('Prepare Gate 2 Review').first().json.gate2_full }}",
+          "limitWaitTime": {
+            "values": {
+              "resumeAmount": 24
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "id": "2cf11ee8-0ead-4867-9e6e-d7f2178fde13",
+      "name": "Gate 2 - Final Work Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3376,
+        560
+      ],
+      "webhookId": "e4fefab8-1a6d-4578-bb01-260f4402bfee",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json || {};\nconst d = (r.data && typeof r.data === 'object') ? r.data : r;\nconst decision = d.decision ? String(d.decision) : 'TIMEOUT';\nreturn [{ json: {\n  decision: decision,\n  timed_out: decision === 'TIMEOUT',\n  feedback: d.feedback ? String(d.feedback) : '',\n  timestamp: new Date().toISOString(),\n} }];"
+      },
+      "id": "28572b31-db75-49b9-b931-ac94c3ac06a4",
+      "name": "Gate 2 - Normalize Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Feedback"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "gate": "2",
+            "decision": "={{ $json.decision }}",
+            "human_edit_or_feedback": "={{ $json.feedback }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gate",
+              "displayName": "gate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "human_edit_or_feedback",
+              "displayName": "human_edit_or_feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e54fcf1c-a684-4ca4-8171-51e0c1b9e311",
+      "name": "Log Gate 2 Feedback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3824,
+        560
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s1",
+                    "leftValue": "={{ $('Gate 2 - Normalize Response').first().json.decision }}",
+                    "rightValue": "Approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Approve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s2",
+                    "leftValue": "={{ $('Gate 2 - Normalize Response').first().json.decision }}",
+                    "rightValue": "Request changes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Request changes"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s3",
+                    "leftValue": "={{ $('Gate 2 - Normalize Response').first().json.decision }}",
+                    "rightValue": "Reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reject"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Timeout"
+        }
+      },
+      "id": "86442dd4-1825-458a-8c53-5c09272001f8",
+      "name": "Gate 2 Decision Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        4048,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Guardrail Check').first().json;\nconst g1 = $('Gate 1 - Normalize Response').first().json;\nconst rev = $('Prepare Gate 2 Review').first().json;\nconst p = g.proposal;\nconst esc = function (t) { return String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nconst date = new Date().toISOString().slice(0, 10);\nconst row = function (k, v) { return '<tr><td style=\"padding:6px;border-bottom:1px solid #ddd\"><b>' + k + '</b></td><td style=\"padding:6px;border-bottom:1px solid #ddd\">' + esc(v) + '</td></tr>'; };\nconst inv = '<div style=\"font-family:Arial,sans-serif;max-width:600px;border:1px solid #ccc;padding:20px\">'\n  + '<h2>Invoice</h2>'\n  + '<table style=\"width:100%;border-collapse:collapse\">'\n  + row('Invoice number', g.project_id)\n  + row('Client', g.client_name)\n  + row('Content type', p.content_type)\n  + row('Number of pieces', p.num_pieces)\n  + row('Total words', p.total_words)\n  + row('Revisions included', p.revisions)\n  + row('Date', date)\n  + '</table>'\n  + '<h3>Total: PKR ' + esc(g1.final_price) + '</h3>'\n  + '<p><small>AI-assisted workflow with human review</small></p></div>';\nconst body = '<p>Hello ' + esc(g.client_name) + ',</p><p>Your content is ready. Please find the full text and your invoice below.</p>'\n  + rev.deliverable_html\n  + '<hr>' + inv\n  + '<hr><p>Reply to this email within 7 days for revisions (up to ' + esc(p.revisions) + ' rounds).</p>'\n  + '<p><small>This service uses an AI-assisted workflow with human review.</small></p>';\nreturn [{ json: { invoice_html: inv, delivery_html: body, subject: 'Your content is ready - ' + g.project_id } }];"
+      },
+      "id": "9492b538-53d7-4725-b546-446dc5fc76ee",
+      "name": "Generate Invoice HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "=Your content is ready - {{ $('Guardrail Check').first().json.project_id }}",
+        "message": "={{ $json.delivery_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b1e82790-7926-40b7-a8b2-b165b07a6731",
+      "name": "Email Deliverable & Invoice to Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4496,
+        320
+      ],
+      "webhookId": "b4f6839b-c745-499a-a45f-2071a6436a31",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "DELIVERED",
+            "deliverable": "={{ $('Prepare Gate 2 Review').first().json.deliverable_text }}",
+            "qa_score": "={{ $('Prepare Gate 2 Review').first().json.qa_score }}"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "96672218-7802-43be-8faf-196667c0fa66",
+      "name": "Update Status - DELIVERED",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4720,
+        320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Delivered & Closed",
+        "emailType": "text",
+        "message": "={{ 'Delivered to client, project closed. Project ' + $('Guardrail Check').first().json.project_id + ' (' + $('Guardrail Check').first().json.client_name + ').' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "08fd90f5-ab28-4e54-9260-8bcb9feb212c",
+      "name": "Email - Delivered & Closed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4944,
+        320
+      ],
+      "webhookId": "2c0eed92-9610-46e8-9eea-12d2b4ab96cb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rl",
+              "leftValue": "={{ $('Round State').first().json.gate2_rounds < 2 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cc73cba1-5ee4-4fc6-b4a9-a0bd2e0d40b8",
+      "name": "Revision Rounds Left?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4272,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "h1",
+              "name": "retry_count",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "h2",
+              "name": "feedback_from_qa",
+              "value": "={{ $('Gate 2 - Normalize Response').first().json.feedback || 'Freelancer requested changes (no details given).' }}",
+              "type": "string"
+            },
+            {
+              "id": "h3",
+              "name": "gate2_rounds",
+              "value": "={{ $('Round State').first().json.gate2_rounds + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0020df0f-bc8d-4a2f-bd33-314ddfa6334f",
+      "name": "Apply Freelancer Feedback",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        4496,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Max Revision Rounds Reached",
+        "emailType": "text",
+        "message": "={{ 'Project ' + $('Guardrail Check').first().json.project_id + ': the maximum of 2 revision rounds was already used. Nothing was delivered; status stays WORK_REVIEW. Please finish this one manually.' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "78d0c3e0-4e35-44d3-84de-70dfbc3ae019",
+      "name": "Email - Max Revision Rounds Reached",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4496,
+        1056
+      ],
+      "webhookId": "77cf3d2b-1921-40e3-ab8b-c9368189c997",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "REJECTED"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3f386bd1-20db-495b-bc06-d20e1df28f97",
+      "name": "Update Status - REJECTED (Gate 2)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4272,
+        704
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Gate 2 Timed Out",
+        "emailType": "text",
+        "message": "={{ 'Gate 2 for project ' + $('Guardrail Check').first().json.project_id + ' timed out after 24h with no response. Nothing was delivered; status stays WORK_REVIEW.' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "77ac6a05-72c7-40a2-a4ab-a73177c2289d",
+      "name": "Email - Gate 2 Timed Out",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4272,
+        896
+      ],
+      "webhookId": "6a1bcf66-8e50-4ca6-be11-6a80c5727a4c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "i1",
+              "name": "retry_count",
+              "value": "={{ $('Round State').first().json.retry_count + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "i2",
+              "name": "feedback_from_qa",
+              "value": "={{ ($json.output.issues || []).map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); }).concat($('Package Draft').first().json.automatic_issues || []).filter(function (x, i, a) { return a.indexOf(x) === i; }).join('; ') }}",
+              "type": "string"
+            },
+            {
+              "id": "i3",
+              "name": "gate2_rounds",
+              "value": "={{ $('Round State').first().json.gate2_rounds }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1dd74114-b429-4368-963b-0415f0e5ac30",
+      "name": "Increment Retry & Store QA Issues",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2928,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "REJECTED"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22f73186-39df-4720-8e4e-74b815bb7169",
+      "name": "Update Status - REJECTED (Client)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3616,
+        512
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Client Declined or Timed Out",
+        "emailType": "text",
+        "message": "={{ 'Client ' + $('Guardrail Check').first().json.client_name + ($('Client Decision - Accept or Decline').first().json.data && $('Client Decision - Accept or Decline').first().json.data.approved === false ? ' DECLINED the proposal.' : ' did not respond within 24h (timeout).') + ' Status: REJECTED.' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "ccf49e8f-2c4f-4001-bded-5600976bd230",
+      "name": "Email - Client Declined or Timed Out",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        512
+      ],
+      "webhookId": "1a8251d0-ca93-45d7-aae0-42a5cf89b910",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Guardrail Check').first().json.project_id }}",
+            "status": "REJECTED"
+          },
+          "matchingColumns": [
+            "project_id"
+          ],
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "87d31755-b8a4-41cc-8397-f5186e877889",
+      "name": "Update Status - REJECTED (Gate 1)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2720,
+        608
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Deal Rejected Confirmation",
+        "emailType": "text",
+        "message": "={{ $('Gate 1 - Normalize Response').first().json.timed_out ? 'Gate 1 timed out after 24h with no response. Deal for ' + $('Guardrail Check').first().json.client_name + ' was NOT sent. Status: REJECTED.' : 'Deal for ' + $('Guardrail Check').first().json.client_name + ' rejected. Nothing was sent to the client. Status: REJECTED.' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "56198991-0973-4dfe-8c40-1c47ce7d5ffd",
+      "name": "Email - Deal Rejected Confirmation",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2944,
+        608
+      ],
+      "webhookId": "59f53f8f-ea7c-489c-ae2e-62f545ee9f8a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Client name: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.client_name }}\nOriginal client message: {{ $('Build Context (Settings + Last 5 Feedback)').first().json.message }}\nMissing information: {{ JSON.stringify($json.output.missing_info) }}\nOut of scope reason: {{ $json.output.out_of_scope_reason || '' }}\nClient language: {{ $json.output.language || 'not stated' }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You write on behalf of a freelance content writer. Write a short, polite email body in the same language as the client (Roman Urdu, Urdu or English; match the client's message) that greets the client by name.\nIf out_of_scope_reason is not empty, do NOT ask questions: politely explain what we cannot do and, if possible, mention what we can help with (blog posts, articles, website copy, product descriptions, newsletters, SEO content, social media captions).\nOtherwise ask at most 3 specific questions based ONLY on the missing information (examples: topic, number of articles, word count, audience, tone, keywords, deadline).\nIf the missing information says a greeting was received (the client only said hi/hello/are you available), reply warmly in this spirit instead of asking 3 narrow questions: \"Hello! Thanks for reaching out to ContentCraft. We'd love to help with your writing needs! Could you please share the topic, content type (blog, article, ad copy), target word count, and your timeline?\" (translate into the client's language if they wrote Roman Urdu or Urdu).\nDo not invent prices, promises or facts. Sign off as the freelancer's assistant. Do not add the AI disclosure line - it is appended automatically. Return only the email body text, no subject line."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "c50fbe39-6d75-491c-8b74-27767318aa45",
+      "name": "AI Clarifying Questions Writer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        800,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "9c24a450-acef-4a81-aa5b-d43508fa14d1",
+      "name": "Clarifier Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        352
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Your content writing inquiry - a few quick questions",
+        "message": "={{ $json.text.replace(/\\n/g, '<br>') }}<br><br><small>This service uses an AI-assisted workflow with human review.</small>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "55213576-b8ae-4fe0-88be-dd7fa9a4ad9a",
+      "name": "Email Clarifying Questions to Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        128
+      ],
+      "webhookId": "556968fb-5f2d-4f86-ae3b-651e88388762",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE",
+          "cachedResultName": "freelancer_ai_agent_sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1o7ZLe20EtkrnI43BIEgm8vcIIpcYYKacF3MgrXICUWE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Projects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "project_id": "={{ $('Build Context (Settings + Last 5 Feedback)').first().json.project_id }}",
+            "client_email": "={{ $('Build Context (Settings + Last 5 Feedback)').first().json.client_email }}",
+            "client_name": "={{ $('Build Context (Settings + Last 5 Feedback)').first().json.client_name }}",
+            "status": "NEEDS_INFO",
+            "requirements_json": "={{ JSON.stringify($('AI Requirements Analyst').first().json.output) }}",
+            "created_at": "={{ $('Build Context (Settings + Last 5 Feedback)').first().json.created_at }}"
+          },
+          "schema": [
+            {
+              "id": "project_id",
+              "displayName": "project_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requirements_json",
+              "displayName": "requirements_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal_json",
+              "displayName": "proposal_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deadline_days",
+              "displayName": "deadline_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "deliverable",
+              "displayName": "deliverable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qa_score",
+              "displayName": "qa_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7283c0e8-1fe9-4a7a-9201-b6feb7788465",
+      "name": "Log Project - NEEDS_INFO",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1376,
+        128
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Jy9AL9EAO4UC8zVF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "appId": "1574768858001172",
+        "object": "page",
+        "fields": [
+          "feed"
+        ],
+        "options": {}
+      },
+      "id": "0972abd4-f4be-4f80-9f05-b8479b6514c7",
+      "name": "Facebook Client Message",
+      "type": "n8n-nodes-base.facebookTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        288
+      ],
+      "webhookId": "85830188-2f9b-4e47-a326-2eeb7b369862",
+      "credentials": {
+        "facebookGraphAppApi": {
+          "id": "V4hNR2ZRqUuPY4G2",
+          "name": "Facebook Graph (App) account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "476f181e-9a5c-4741-8a56-b6a8c59dd7de",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "nabihatahirashahid@gmail.com",
+        "subject": "Project update: Error Alert",
+        "emailType": "text",
+        "message": "={{ 'WORKFLOW ERROR in ' + $json.workflow.name + '. Node: ' + $json.execution.lastNodeExecuted + '. Message: ' + String($json.execution.error.message || '').replace(/[<>&]/g, ' ') + '. Execution: ' + $json.execution.url }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "12e86e4d-bc76-42d9-91bc-ce61271c3d2b",
+      "name": "Email - Error Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        272,
+        544
+      ],
+      "webhookId": "554b8b8d-e281-4f95-8675-9d99b7989245",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "nyi8omkG1rrhcl1W",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Client Message Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Client Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Client Message": {
+      "main": [
+        [
+          {
+            "node": "Clean Input & Generate Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Input & Generate Project ID": {
+      "main": [
+        [
+          {
+            "node": "Read Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Settings": {
+      "main": [
+        [
+          {
+            "node": "Read Feedback History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Feedback History": {
+      "main": [
+        [
+          {
+            "node": "Build Context (Settings + Last 5 Feedback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context (Settings + Last 5 Feedback)": {
+      "main": [
+        [
+          {
+            "node": "AI Requirements Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Requirements Analyst": {
+      "main": [
+        [
+          {
+            "node": "Is Request Clear Enough?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirements Analyst Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Requirements Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirements Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Requirements Analyst",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirements Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Requirements Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Request Clear Enough?": {
+      "main": [
+        [
+          {
+            "node": "AI Proposal Writer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Clarifying Questions Writer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Proposal Writer": {
+      "main": [
+        [
+          {
+            "node": "Guardrail Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal Writer Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Proposal Writer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Proposal Writer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Proposal Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrail Check": {
+      "main": [
+        [
+          {
+            "node": "Log Project - PROPOSAL_PENDING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Project - PROPOSAL_PENDING": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gate 1 Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gate 1 Message": {
+      "main": [
+        [
+          {
+            "node": "Gate 1 - Freelancer Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 1 - Freelancer Approval": {
+      "main": [
+        [
+          {
+            "node": "Gate 1 - Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 1 - Normalize Response": {
+      "main": [
+        [
+          {
+            "node": "Log Gate 1 Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Gate 1 Feedback": {
+      "main": [
+        [
+          {
+            "node": "Gate 1 Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 1 Approved?": {
+      "main": [
+        [
+          {
+            "node": "Email Proposal to Client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status - REJECTED (Gate 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Proposal to Client": {
+      "main": [
+        [
+          {
+            "node": "Update Status - PROPOSAL_SENT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - PROPOSAL_SENT": {
+      "main": [
+        [
+          {
+            "node": "Client Decision - Accept or Decline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Decision - Accept or Decline": {
+      "main": [
+        [
+          {
+            "node": "Client Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Update Status - ACCEPTED",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status - REJECTED (Client)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - ACCEPTED": {
+      "main": [
+        [
+          {
+            "node": "Init Retry State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Retry State": {
+      "main": [
+        [
+          {
+            "node": "Round State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Round State": {
+      "main": [
+        [
+          {
+            "node": "AI Content Creator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Content Creator": {
+      "main": [
+        [
+          {
+            "node": "Package Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Creator Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Content Creator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Content Creator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Content Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Package Draft": {
+      "main": [
+        [
+          {
+            "node": "AI QA Critic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI QA Critic": {
+      "main": [
+        [
+          {
+            "node": "QA Passed or Retries Exhausted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Critic Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI QA Critic",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI QA Critic",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "QA Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed or Retries Exhausted?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gate 2 Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Increment Retry & Store QA Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gate 2 Review": {
+      "main": [
+        [
+          {
+            "node": "Update Status - WORK_REVIEW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - WORK_REVIEW": {
+      "main": [
+        [
+          {
+            "node": "Gate 2 - Final Work Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 2 - Final Work Approval": {
+      "main": [
+        [
+          {
+            "node": "Gate 2 - Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 2 - Normalize Response": {
+      "main": [
+        [
+          {
+            "node": "Log Gate 2 Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Gate 2 Feedback": {
+      "main": [
+        [
+          {
+            "node": "Gate 2 Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate 2 Decision Router": {
+      "main": [
+        [
+          {
+            "node": "Generate Invoice HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Revision Rounds Left?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status - REJECTED (Gate 2)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Gate 2 Timed Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Invoice HTML": {
+      "main": [
+        [
+          {
+            "node": "Email Deliverable & Invoice to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Deliverable & Invoice to Client": {
+      "main": [
+        [
+          {
+            "node": "Update Status - DELIVERED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - DELIVERED": {
+      "main": [
+        [
+          {
+            "node": "Email - Delivered & Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revision Rounds Left?": {
+      "main": [
+        [
+          {
+            "node": "Apply Freelancer Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Max Revision Rounds Reached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Freelancer Feedback": {
+      "main": [
+        [
+          {
+            "node": "Round State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Retry & Store QA Issues": {
+      "main": [
+        [
+          {
+            "node": "Round State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - REJECTED (Client)": {
+      "main": [
+        [
+          {
+            "node": "Email - Client Declined or Timed Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status - REJECTED (Gate 1)": {
+      "main": [
+        [
+          {
+            "node": "Email - Deal Rejected Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Clarifying Questions Writer": {
+      "main": [
+        [
+          {
+            "node": "Email Clarifying Questions to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarifier Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Clarifying Questions Writer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Clarifying Questions to Client": {
+      "main": [
+        [
+          {
+            "node": "Log Project - NEEDS_INFO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Client Message": {
+      "main": [
+        [
+          {
+            "node": "Normalize Client Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Email - Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a2991747-d929-43ba-bfb4-93fd43c19675",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6a45bd8a72beec346b69de26855ef1ff6022d4f3e9b800cbc7a134c869853ae9"
+  },
+  "nodeGroups": [
+    {
+      "id": "0da749d2-691f-4ca4-9d3a-da3e4b92c70b",
+      "name": "Intake and understand",
+      "nodeIds": [
+        "e460abbb-cfd9-4c54-8aa5-b9dafc6ad8c9",
+        "3dd0036a-ab64-4293-b495-0f500cf7c22f",
+        "a20ac340-cfbe-41d2-8600-40e45ff2abc0",
+        "d066bc28-89a5-4b8b-aca9-71e31b610920",
+        "77669ab9-2446-4722-ad64-a0b714e29768",
+        "8b796363-c728-4f66-a639-ed27ec121b93",
+        "2d3d030b-ead8-4753-8885-f07e8f7a536a",
+        "a2268b23-11b6-433e-afa7-c53b20eff546",
+        "6bceab84-ff4b-45ea-873b-b4f8dbf594e1",
+        "72910214-f76d-4c62-85a7-9d762832ef6f"
+      ],
+      "description": "Webhook or Facebook message is cleaned, enriched with pricing settings and past corrections, then AI extracts requirements and checks clarity"
+    },
+    {
+      "id": "d1a2b6e0-d6aa-4558-9caa-a0f48ae51eaf",
+      "name": "Ask client to clarify",
+      "nodeIds": [
+        "c50fbe39-6d75-491c-8b74-27767318aa45",
+        "9c24a450-acef-4a81-aa5b-d43508fa14d1",
+        "55213576-b8ae-4fe0-88be-dd7fa9a4ad9a",
+        "7283c0e8-1fe9-4a7a-9201-b6feb7788465"
+      ],
+      "description": "Unclear request: AI writes a polite email (or a polite decline if out of scope), emails the client, logs NEEDS_INFO, then the run ends"
+    },
+    {
+      "id": "4bb380c3-0497-40d6-aeb8-f98c27b4465b",
+      "name": "Negotiate deal",
+      "nodeIds": [
+        "e3950e37-2a9d-41dc-b2ab-f88d8ad0243e",
+        "1eac8960-6516-4be4-ae93-eb3a2e785bd3",
+        "97301b3e-3675-4306-807f-66d4ea3132d1",
+        "f0150b63-7e70-4106-96b3-9cf7b001e13b",
+        "f0a2d44b-269c-4569-9a98-947191e174f8",
+        "12a11fd5-fae0-4442-a6b5-508e096428e9",
+        "b0a6e6e5-1dc0-4a20-b242-76cdf99dfaa0",
+        "71b9b927-fbc8-437e-badf-847c59c3a6e4",
+        "0418b716-44c7-44a3-af56-888bff1a1e82",
+        "7b19a606-e771-48db-99df-0ab4ab13f301",
+        "d9cf3a76-c0e8-4291-9cba-77e96396f45d",
+        "87d31755-b8a4-41cc-8397-f5186e877889",
+        "56198991-0973-4dfe-8c40-1c47ce7d5ffd",
+        "cb86c9c1-6fd8-4ab2-a0f1-2d26e10f8762",
+        "c92df001-d12a-4f01-8fd0-3970d8b51d32",
+        "9490c0e9-8bf9-43b2-b671-1398a5f5fecb",
+        "e5b22913-71f5-4cf9-a31b-311a145a84c1",
+        "22f73186-39df-4720-8e4e-74b815bb7169",
+        "ccf49e8f-2c4f-4001-bded-5600976bd230",
+        "a7778ba9-a12b-448f-80fa-f299add42f19"
+      ],
+      "description": "AI drafts a rule-checked proposal, freelancer approves at Gate 1, client accepts or declines by email; rejections close the project"
+    },
+    {
+      "id": "7c614501-6035-43ad-8942-34e42a181aa8",
+      "name": "Create, review and deliver",
+      "nodeIds": [
+        "2f4a75ac-9da0-43a7-a649-dee860542cd3",
+        "6103a5e6-7596-4c88-84a8-322ea39a0a17",
+        "0d110fb9-9b65-4fec-a6d0-2cb6a964f325",
+        "a69eec18-edf1-4dce-a2d2-3de00892dda0",
+        "8e99dc99-5b38-4f2c-8c5d-c30fb2805487",
+        "8bd09f95-196e-4f20-b0c4-bc6a100e450a",
+        "7349b7f1-5619-4874-886b-c61c60cc8a8f",
+        "cdf19855-e189-4bef-86db-f6a446be9fba",
+        "b2468a8f-5f9a-4c79-950c-a21cdde80cff",
+        "5163b2bb-7916-4cd7-a193-1929adf202cb",
+        "8b7edb64-3a74-4e79-befb-c4ecb9ff1654",
+        "800efc29-ec7e-45da-9bf3-52cc2c3010c6",
+        "1dd74114-b429-4368-963b-0415f0e5ac30",
+        "e9cae1c9-446c-49df-a5d9-cfb586a4be37",
+        "2f61da84-10eb-40f2-86f8-e75bfcc91d52",
+        "2cf11ee8-0ead-4867-9e6e-d7f2178fde13",
+        "28572b31-db75-49b9-b931-ac94c3ac06a4",
+        "e54fcf1c-a684-4ca4-8171-51e0c1b9e311",
+        "86442dd4-1825-458a-8c53-5c09272001f8",
+        "cc73cba1-5ee4-4fc6-b4a9-a0bd2e0d40b8",
+        "0020df0f-bc8d-4a2f-bd33-314ddfa6334f",
+        "78d0c3e0-4e35-44d3-84de-70dfbc3ae019",
+        "3f386bd1-20db-495b-bc06-d20e1df28f97",
+        "77ac6a05-72c7-40a2-a4ab-a73177c2289d",
+        "9492b538-53d7-4725-b546-446dc5fc76ee",
+        "b1e82790-7926-40b7-a8b2-b165b07a6731",
+        "96672218-7802-43be-8faf-196667c0fa66",
+        "08fd90f5-ab28-4e54-9260-8bcb9feb212c"
+      ],
+      "description": "Accepted deal: AI writes and checks the content, freelancer approves at Gate 2, then work and invoice are emailed to the client"
+    },
+    {
+      "id": "e091b867-978a-4ef7-89ed-de33e540c8bf",
+      "name": "Alert freelancer on error",
+      "nodeIds": [
+        "12e86e4d-bc76-42d9-91bc-ce61271c3d2b"
+      ],
+      "description": "Any workflow failure emails the freelancer an alert with the failing node and execution link"
+    }
+  ],
+  "id": "c1j6jaYg2wEMo1Pb",
+  "tags": []
+}
