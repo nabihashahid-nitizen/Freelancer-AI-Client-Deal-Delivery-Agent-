@@ -1,54 +1,55 @@
-Freelancer AI Client Deal & Delivery Agent (Human-in-the-Loop)
-An end-to-end multi-agent n8n workflow designed to automate a client-facing freelance/agency service lifecycle. It seamlessly handles lead intake, requirement analysis, proposal generation, human approval gates, automated content delivery, quality assurance, revision loops, and invoicing.
+# Freelancer AI Client Deal & Delivery Agent (Human-in-the-Loop)
 
-📌 Key Features & Architecture
-1. Client Intake & Context Building
-Multi-channel lead capture via Facebook Messenger Webhook or custom Webhooks.
+A comprehensive multi-agent n8n workflow consisting of **66 nodes** designed to automate the full lifecycle of a content agency—from lead intake and AI requirements analysis to human approval gates, quality assurance loops, and automated invoicing.
 
-Normalizes client inputs, assigns unique Project IDs, and cleans data.
+---
 
-Integrates with Google Sheets to fetch agency settings and historical client feedback (last 5 interactions) for personalized processing.
+## Project Overview
 
-2. AI Requirement Analysis & Automated Clarification
-AI Requirements Analyst checks if client instructions are clear and detailed.
+This system acts as an autonomous operations engine for freelancing and content writing businesses. It receives client messages via Facebook Messenger or custom webhooks, processes requests through specialized AI agents, enforces admin supervision (Human-in-the-Loop) for key decisions, and handles delivery with automated HTML invoices.
 
-Auto-Clarification Loop: If information is missing or the client sends a vague greeting ("Hi", "Hello"), the AI drafts tailored clarifying questions and dispatches them via Gmail, logging status as NEEDS_INFO.
+---
 
-3. Proposal Generation & Gate 1 Approval (Human-in-the-Loop)
-AI Proposal Writer generates project scopes and pricing.
+## Key Features & System Architecture
 
-Includes code-based guardrails to validate proposal parameters.
+### 1. Lead Intake & Context Integration
+* **Multi-Channel Triggers:** Ingests client messages through **Facebook Messenger** and custom **HTTP Webhooks**.
+* **Context Engine:** Fetches system settings and the last 5 client feedback entries from **Google Sheets** to personalize responses and maintain continuity.
 
-Gate 1: Sends an interactive email to the admin for approval.
+### 2. Requirements Analyst & Auto-Clarification
+* **AI Requirements Analyst:** Evaluates incoming client requests for completeness (topic, word count, deadline).
+* **Smart Clarification:** If the request is vague or a simple greeting (e.g., *"Hi"*, *"Hello"*), the AI drafts targeted questions and sends them via **Gmail**, logging the project status as `NEEDS_INFO`.
 
-Approved: Sends proposal to client (PROPOSAL_SENT).
+### 3. Proposal Generation & Gate 1 Approval
+* **AI Proposal Writer:** Generates project proposals based on analyzed requirements.
+* **Guardrail Validation:** Applies code-based checks to verify proposal parameters.
+* **Gate 1 (Admin Review):** Sends an interactive approval email to the admin.
+  * **Approved:** Proposal is emailed to the client (`PROPOSAL_SENT`).
+  * **Rejected:** Updates status to `REJECTED` and sends a confirmation email.
 
-Rejected: Notifies client and marks status as REJECTED.
+### 4. Autonomous Content Creation & QA Loop
+* **AI Content Creator:** Drafts the deliverable once the client accepts the proposal (`ACCEPTED`).
+* **AI QA Critic:** Evaluates the draft against quality benchmarks. If it fails, the workflow loops back to regenerate the content using the QA feedback until standards are met or maximum retries are exhausted.
 
-4. Delivery Engine & Autonomous QA Loop
-AI Content Creator generates deliverables upon client acceptance (ACCEPTED).
+### 5. Gate 2 Approval, Invoicing & Delivery
+* **Gate 2 (Final Review):** Sends the final draft to the admin (`WORK_REVIEW`).
+  * **Approved:** Automatically generates an **HTML Invoice** and delivers both assets to the client via email (`DELIVERED`).
+  * **Request Changes:** Applies admin feedback and re-executes the creation loop.
+  * **Max Revisions / Timeout:** Automatically updates status and sends follow-up notifications.
 
-AI QA Critic scores the work. If QA fails, it triggers an iterative revision loop using critique feedback until quality standards are met or max retries are reached.
+### 6. Error Handling & Monitoring
+* **Error Trigger:** Centralized failure alert system that sends instant Gmail notifications to the admin if any node encounters an execution error.
+* **Audit Trail:** Continuously syncs status logs across all stages to **Google Sheets**.
 
-5. Gate 2 Approval, HTML Invoicing & Delivery
-Gate 2: Final draft is emailed to the admin for review (WORK_REVIEW).
+---
 
-Approve: Generates a custom HTML Invoice and delivers both invoice and final assets to the client (DELIVERED).
+## 🏗️ Tech Stack
 
-Request Changes: Applies feedback and re-triggers creation engine.
+* **Workflow Orchestration:** [n8n]([https://n8n.io/](https://bihashd1.app.n8n.cloud/assistant/fac5a74a-8564-4f82-9309-f1453960c249)) (66 Nodes)
+* **AI & LLM Services:** OpenAI API / Google Gemini API
+* **Communication Channels:** Facebook Messenger Graph API, Gmail API
+* **Database & Logs:** Google Sheets API
+* **Hosting / Deployment:** Alternate Clouds
 
-Reject / Timeout: Updates project logs and triggers automated follow-ups.
+---
 
-6. Error Handling & Audit Trail
-Centralized Error Trigger Node alerts admin instantly via Gmail on workflow failures.
-
-Comprehensive status updates continuously synced to Google Sheets.
-
-🛠️ Tech Stack
-Automation Engine: n8n (66 Nodes Architecture)
-
-LLM Engine: OpenAI / Google Gemini API
-
-Triggers / Channels: Facebook Messenger Webhook, Custom Webhooks, Gmail
-
-Database & Logs: Google Sheets API
