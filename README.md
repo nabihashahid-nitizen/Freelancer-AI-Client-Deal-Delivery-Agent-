@@ -1,4 +1,4 @@
-# Freelancer AI Client Deal & Delivery Agent (Human-in-the-Loop)
+# Freelancer AI Client Deal & Delivery Agent 
 
 A comprehensive multi-agent n8n workflow consisting of **66 nodes** designed to automate the full lifecycle of a content agency—from lead intake and AI requirements analysis to human approval gates, quality assurance loops, and automated invoicing.
 
@@ -43,7 +43,7 @@ This system acts as an autonomous operations engine for freelancing and content 
 
 ---
 
-## 🏗️ Tech Stack
+##Tech Stack
 
 * **Workflow Orchestration:** [n8n]([https://n8n.io/](https://bihashd1.app.n8n.cloud/assistant/fac5a74a-8564-4f82-9309-f1453960c249)) (66 Nodes)
 * **AI & LLM Services:** OpenAI API / Google Gemini API
